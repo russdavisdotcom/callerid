@@ -2,6 +2,7 @@
 
 require_relative "callerid/version"
 require_relative "callerid/lookup_service"
+require_relative "callerid/abuse_service"
 require_relative "callerid/cli"
 
 module CallerID
