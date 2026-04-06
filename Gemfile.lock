@@ -1,9 +1,14 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    anthropic (1.28.0)
+      cgi
+      connection_pool
     base64 (0.3.0)
     bigdecimal (4.0.1)
+    cgi (0.5.1)
     colorize (0.8.1)
+    connection_pool (3.0.2)
     csv (3.3.5)
     faraday (2.14.0)
       faraday-net_http (>= 2.0, < 3.5)
@@ -38,6 +43,7 @@ PLATFORMS
   arm64-darwin-24
 
 DEPENDENCIES
+  anthropic (~> 1.28)
   colorize (~> 0.8)
   httparty (~> 0.21)
   thor (~> 1.3)

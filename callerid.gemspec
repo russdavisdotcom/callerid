@@ -22,11 +22,12 @@ Gem::Specification.new do |spec|
   spec.executables   = ["callerid"]
   spec.require_paths = ["lib"]
 
-  spec.required_ruby_version = ">= 2.7.0"
+  spec.required_ruby_version = ">= 3.2.0"
 
   spec.add_dependency "thor", "~> 1.3"
   spec.add_dependency "httparty", "~> 0.21"
   spec.add_dependency "colorize", "~> 0.8"
   spec.add_dependency "twilio-ruby", "~> 7.0"
+  spec.add_dependency "anthropic", "~> 1.28"
 end
 
