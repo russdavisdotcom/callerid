@@ -4,6 +4,7 @@ require "thor"
 require "colorize"
 require "json"
 require_relative "lookup_service"
+require_relative "abuse_service"
 
 module CallerID
   class CLI < Thor
@@ -12,7 +13,8 @@ module CallerID
     option :api_secret, aliases: "-s", desc: "Twilio Auth Token"
     option :format, aliases: "-f", enum: %w[table json], default: "table", desc: "Output format"
     option :debug, aliases: "-d", type: :boolean, desc: "Show debug information"
-    
+    option :abuse, aliases: "-a", type: :boolean, desc: "Lookup abuse reporting contact for VOIP carriers"
+
     def lookup(phone_number)
       service = LookupService.new(
         api_key: options[:api_key],
@@ -31,7 +33,20 @@ module CallerID
         exit 1
       end
 
-      display_result(result, options[:format])
+      abuse_result = nil
+      if options[:abuse]
+        carrier = result[:carrier] || {}
+        abuse_service = AbuseService.new(
+          debug: options[:debug]
+        )
+        abuse_result = abuse_service.lookup(
+          carrier[:name] || "Unknown",
+          carrier[:type] || "unknown",
+          result[:phone_number]
+        )
+      end
+
+      display_result(result, options[:format], abuse_result)
     end
 
     desc "version", "Show version information"
@@ -58,12 +73,14 @@ module CallerID
 
     private
 
-    def display_result(result, format)
+    def display_result(result, format, abuse_result = nil)
       case format
       when "json"
+        result[:abuse] = abuse_result if abuse_result
         puts JSON.pretty_generate(result)
       else
         display_table(result)
+        display_abuse(abuse_result) if abuse_result
       end
     end
 
@@ -110,6 +127,24 @@ module CallerID
 
       puts "\nSource:".colorize(:magenta) + " #{result[:source] || 'unknown'}"
       puts "=" * 60 + "\n"
+    end
+
+    def display_abuse(abuse_result)
+      if abuse_result[:skipped]
+        puts "\nAbuse Lookup:".colorize(:yellow) + " Skipped — #{abuse_result[:reason]}"
+      elsif abuse_result[:error]
+        puts "\n❌ Abuse Lookup Error:".colorize(:red) + " #{abuse_result[:error]}"
+      elsif abuse_result[:not_found]
+        puts "\nAbuse Lookup:".colorize(:yellow) + " No abuse contact found for #{abuse_result[:carrier_name]}"
+      else
+        puts "\n" + "Abuse Contact:".colorize(:red).bold
+        if abuse_result[:email]
+          puts "  Email:".colorize(:white) + " #{abuse_result[:email]}"
+        end
+        if abuse_result[:url]
+          puts "  URL:".colorize(:white) + " #{abuse_result[:url]}"
+        end
+      end
     end
   end
 end
