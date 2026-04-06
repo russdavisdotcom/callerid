@@ -3,6 +3,7 @@
 require "thor"
 require "colorize"
 require "json"
+require "uri"
 require_relative "lookup_service"
 require_relative "abuse_service"
 
@@ -14,6 +15,7 @@ module CallerID
     option :format, aliases: "-f", enum: %w[table json], default: "table", desc: "Output format"
     option :debug, aliases: "-d", type: :boolean, desc: "Show debug information"
     option :abuse, aliases: "-a", type: :boolean, desc: "Lookup abuse reporting contact for VOIP carriers"
+    option :report, aliases: "-r", type: :boolean, desc: "Draft abuse report and open in email client (implies --abuse)"
 
     def lookup(phone_number)
       service = LookupService.new(
@@ -34,7 +36,8 @@ module CallerID
       end
 
       abuse_result = nil
-      if options[:abuse]
+      abuse_service = nil
+      if options[:abuse] || options[:report]
         carrier = result[:carrier] || {}
         abuse_service = AbuseService.new(
           debug: options[:debug]
@@ -47,6 +50,12 @@ module CallerID
       end
 
       display_result(result, options[:format], abuse_result)
+
+      if options[:report] && abuse_result && !abuse_result[:skipped] && !abuse_result[:error] && !abuse_result[:not_found]
+        handle_report(abuse_service, result, abuse_result)
+      end
+
+      display_api_cost(abuse_service) if abuse_service
     end
 
     desc "version", "Show version information"
@@ -145,6 +154,39 @@ module CallerID
           puts "  URL:".colorize(:white) + " #{abuse_result[:url]}"
         end
       end
+    end
+
+    def handle_report(abuse_service, result, abuse_result)
+      carrier_name = result[:carrier]&.dig(:name) || "Unknown"
+      phone_number = result[:phone_number]
+
+      if abuse_result[:email]
+        draft = abuse_service.draft_report(carrier_name, phone_number, abuse_result[:email])
+
+        if draft[:error]
+          puts "\n❌ Report Draft Error:".colorize(:red) + " #{draft[:error]}"
+          return
+        end
+
+        puts "\n" + "Abuse Report Draft:".colorize(:cyan).bold
+        puts draft[:body]
+
+        mailto = "mailto:#{draft[:to]}?subject=#{URI.encode_www_form_component(draft[:subject])}&body=#{URI.encode_www_form_component(draft[:body])}"
+        system("open", mailto)
+        puts "\n" + "Opened in your email client.".colorize(:green)
+      elsif abuse_result[:url]
+        puts "\nNo abuse email found — opening reporting page instead...".colorize(:yellow)
+        system("open", abuse_result[:url])
+      end
+    end
+
+    def display_api_cost(abuse_service)
+      cost = abuse_service.estimated_cost
+      return if cost[:input_tokens] == 0 && cost[:output_tokens] == 0
+
+      puts "\n" + "API Usage:".colorize(:magenta)
+      puts "  Tokens:".colorize(:white) + " #{cost[:input_tokens]} in / #{cost[:output_tokens]} out"
+      puts "  Est. Cost:".colorize(:white) + " $#{"%.6f" % cost[:total_cost]}"
     end
   end
 end
